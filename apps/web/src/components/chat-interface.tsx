@@ -15,6 +15,13 @@ interface Message {
   content: string;
   toolCalls?: ToolCall[];
   toolCallId?: string;
+  approval?: {
+    toolName: string;
+    arguments: Record<string, unknown>;
+    reason: string;
+    threadId: string;
+    interruptId: string;
+  };
 }
 
 interface TokenUsage {
@@ -158,6 +165,24 @@ export function ChatInterface() {
                 if (parsed['usage']) {
                   setLastUsage(parsed['usage'] as TokenUsage);
                 }
+              } else if (currentEventType === 'approval_needed') {
+                const approvalMsg: Message = {
+                  role: 'assistant',
+                  content: '',
+                  approval: {
+                    toolName: parsed['toolName'] as string,
+                    arguments: parsed['arguments'] as Record<string, unknown>,
+                    reason: parsed['reason'] as string,
+                    threadId: parsed['threadId'] as string,
+                    interruptId: parsed['interruptId'] as string,
+                  },
+                };
+                currentMessages.push(approvalMsg);
+                setMessages((prev) => [
+                  ...prev.filter((m) => m.role !== 'system'),
+                  userMessage,
+                  ...currentMessages,
+                ]);
               } else if (currentEventType === 'error') {
                 const errorMsg: Message = {
                   role: 'assistant',
@@ -190,6 +215,43 @@ export function ChatInterface() {
       setIsLoading(false);
       setStatusText('');
       abortControllerRef.current = null;
+    }
+  };
+
+  const handleApprove = async (threadId: string, interruptId: string) => {
+    try {
+      const response = await fetch(`${WORKER_URL}/run/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId, interruptId }),
+      });
+      const result = await response.json();
+      if (result.result) {
+        const resultMsg: Message = {
+          role: 'assistant',
+          content: result.result as string,
+        };
+        setMessages((prev) => [...prev, resultMsg]);
+      }
+    } catch (error) {
+      console.error('Approval failed:', error);
+    }
+  };
+
+  const handleReject = async (threadId: string, interruptId: string) => {
+    try {
+      await fetch(`${WORKER_URL}/run/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId, interruptId }),
+      });
+      const rejectMsg: Message = {
+        role: 'assistant',
+        content: '工具调用已被拒绝',
+      };
+      setMessages((prev) => [...prev, rejectMsg]);
+    } catch (error) {
+      console.error('Rejection failed:', error);
     }
   };
 
@@ -229,7 +291,7 @@ export function ChatInterface() {
           </div>
         ) : (
           messages.map((message, index) => (
-            <ChatMessage key={index} message={message} />
+            <ChatMessage key={index} message={message} onApprove={handleApprove} onReject={handleReject} />
           ))
         )}
         {isLoading && (

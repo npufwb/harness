@@ -1,6 +1,7 @@
 'use client';
 
 import { ToolCallCard, ToolResultCard } from './tool-call';
+import { ApprovalCard } from './approval-card';
 
 interface ToolCall {
   id: string;
@@ -13,13 +14,22 @@ interface Message {
   content: string;
   toolCalls?: ToolCall[];
   toolCallId?: string;
+  approval?: {
+    toolName: string;
+    arguments: Record<string, unknown>;
+    reason: string;
+    threadId: string;
+    interruptId: string;
+  };
 }
 
 interface ChatMessageProps {
   message: Message;
+  onApprove?: (threadId: string, interruptId: string) => void;
+  onReject?: (threadId: string, interruptId: string) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onApprove, onReject }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isTool = message.role === 'tool';
   const isSystem = message.role === 'system';
@@ -32,6 +42,21 @@ export function ChatMessage({ message }: ChatMessageProps) {
   // 工具结果
   if (isTool) {
     return <ToolResultCard content={message.content} toolCallId={message.toolCallId} />;
+  }
+
+  // 审批卡片
+  if (message.approval) {
+    return (
+      <div className="flex justify-start">
+        <ApprovalCard
+          toolName={message.approval.toolName}
+          arguments={message.approval.arguments}
+          reason={message.approval.reason}
+          onApprove={() => onApprove?.(message.approval!.threadId, message.approval!.interruptId)}
+          onReject={() => onReject?.(message.approval!.threadId, message.approval!.interruptId)}
+        />
+      </div>
+    );
   }
 
   // 用户消息
