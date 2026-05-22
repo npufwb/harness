@@ -127,6 +127,16 @@ infra/
 - Next.js 控制台（聊天界面，端口 3000）
 - Prompt 模板版本化
 
+Phase 1 完善：
+- Trace ID 关联日志（每个请求生成 UUID，日志通过 child logger 串联）
+- Token 用量采集（累加 provider 返回的 usage，前端状态栏显示）
+- Prompts 包集成（Worker 自动注入版本化 system prompt，移除前端硬编码）
+- 前端工具调用链展示（ToolCallCard/ToolResultCard 组件，可折叠查看参数和结果）
+- Worker 通过 Gateway 调工具（HTTP 调用，Gateway 成为工具中枢）
+- MCP 真正集成（MCPClient 封装，支持 stdio/sse，mcp.config.json 配置驱动）
+- 流式输出（SSE 端点 /run/stream，前端逐步渲染，支持取消）
+- 单元测试（vitest，21 个测试用例）
+
 启动方式：
 ```bash
 # 配置环境变量（在 apps/worker/.env 中）
@@ -134,10 +144,38 @@ LLM_PROVIDER=openai
 LLM_API_KEY=your-api-key
 LLM_BASE_URL=https://api.example.com/v1
 LLM_MODEL=your-model
+GATEWAY_URL=http://localhost:3002
 
 pnpm dev:worker   # 启动 Worker (端口 3001)
 pnpm dev:gateway  # 启动 Gateway (端口 3002)
 pnpm dev:web      # 启动 Web 控制台 (端口 3000)
+```
+
+MCP 配置（apps/gateway/mcp.config.json）：
+```json
+{
+  "servers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    },
+    "github": {
+      "transport": "sse",
+      "url": "https://mcp.github.com/sse"
+    }
+  }
+}
+```
+
+API 端点：
+```
+POST /run          # 非流式执行（返回完整结果）
+POST /run/stream   # 流式执行（SSE，支持取消）
+GET  /health       # 健康检查
+GET  /tools        # 工具列表
+POST /tools/:name  # 执行工具
+GET  /services     # 已注册服务列表
 ```
 
 测试验证：
@@ -159,6 +197,10 @@ Agent 天气查询测试 ✅ POST http://localhost:3001/run
 Gateway 工具直调 ✅ POST http://localhost:3002/tools/calculator
   输入: {"input": {"expression": "10 * 5 + 3"}}
   输出: "10 * 5 + 3 = 53" (耗时 4ms)
+
+单元测试 ✅ pnpm test
+  共享层: 7 个测试通过
+  工具层: 14 个测试通过（计算器 + 天气）
 ```
 
 ### Phase 2 — 记忆与持久化
