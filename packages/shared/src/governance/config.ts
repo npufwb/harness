@@ -28,16 +28,19 @@ export class GovernanceManager {
   private loadConfig(): void {
     if (!existsSync(this.configPath)) {
       logger.info({ path: this.configPath }, 'Governance config not found, using defaults');
+      this.rules = [...builtinRules];
       return;
     }
 
     try {
       const raw = readFileSync(this.configPath, 'utf-8');
       this.config = JSON.parse(raw) as GovernanceConfig;
-      logger.info({ config: this.config }, 'Governance config loaded');
+      this.rules = builtinRules.filter(r => this.config.rules.includes(r.name));
+      logger.info({ config: this.config, activeRules: this.rules.length }, 'Governance config loaded');
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       logger.error({ error: msg, path: this.configPath }, 'Failed to load governance config');
+      this.rules = [...builtinRules];
     }
   }
 
