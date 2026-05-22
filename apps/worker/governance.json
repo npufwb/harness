@@ -1,0 +1,4 @@
+{
+  "approvalRequired": [],
+  "rules": ["sensitive-data"]
+}
