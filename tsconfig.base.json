@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "paths": {
+      "@harness/agents": ["./packages/agents/src"],
+      "@harness/agents/*": ["./packages/agents/src/*"],
+      "@harness/tools": ["./packages/tools/src"],
+      "@harness/tools/*": ["./packages/tools/src/*"],
+      "@harness/memory": ["./packages/memory/src"],
+      "@harness/memory/*": ["./packages/memory/src/*"],
+      "@harness/prompts": ["./packages/prompts/src"],
+      "@harness/prompts/*": ["./packages/prompts/src/*"],
+      "@harness/shared": ["./packages/shared/src"],
+      "@harness/shared/*": ["./packages/shared/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build", ".next", "out"]
+}

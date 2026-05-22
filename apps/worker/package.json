@@ -1,0 +1,27 @@
+{
+  "name": "@harness/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@harness/agents": "workspace:*",
+    "@harness/tools": "workspace:*",
+    "@harness/shared": "workspace:*",
+    "hono": "^4.4.0",
+    "@hono/node-server": "^1.11.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0",
+    "tsx": "^4.15.0"
+  }
+}

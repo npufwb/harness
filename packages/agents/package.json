@@ -1,0 +1,31 @@
+{
+  "name": "@harness/agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./graphs": "./src/graphs/index.ts",
+    "./provider": "./src/provider.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@harness/shared": "workspace:*",
+    "@harness/tools": "workspace:*",
+    "@harness/prompts": "workspace:*",
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "@langchain/anthropic": "^0.3.0",
+    "@langchain/openai": "^0.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}
