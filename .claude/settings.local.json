@@ -6,7 +6,9 @@
       "Bash(git commit *)",
       "Bash(pnpm typecheck *)",
       "Bash(pnpm test *)",
-      "Bash(pnpm --filter @harness/agents add pino)"
+      "Bash(pnpm --filter @harness/agents add pino)",
+      "Bash(git *)",
+      "Bash(pnpm --filter @harness/shared add -D dotenv)"
     ]
   }
 }
