@@ -39,3 +39,10 @@ export const logger = createLogger({
   level: process.env['LOG_LEVEL'] ?? 'info',
   pretty: process.env['NODE_ENV'] !== 'production',
 });
+
+/**
+ * 创建带 traceId 的子日志实例
+ */
+export function createTraceLogger(traceId: string): pino.Logger {
+  return logger.child({ traceId });
+}

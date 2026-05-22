@@ -1,17 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ChatMessage } from './chat-message';
 import { ChatInput } from './chat-input';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
+interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
 }
+
+interface Message {
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string;
+  toolCalls?: ToolCall[];
+  toolCallId?: string;
+}
+
+interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+const WORKER_URL = process.env['NEXT_PUBLIC_WORKER_URL'] ?? 'http://localhost:3001';
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [statusText, setStatusText] = useState<string>('');
+  const [lastUsage, setLastUsage] = useState<TokenUsage | null>(null);
+  const [lastTraceId, setLastTraceId] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return;
@@ -20,57 +40,161 @@ export function ChatInterface() {
     const userMessage: Message = { role: 'user', content };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    setLastUsage(null);
+    setStatusText('Agent 思考中...');
+
+    // 创建 AbortController
+    abortControllerRef.current = new AbortController();
 
     try {
-      // 发送到 Worker
-      const response = await fetch('http://localhost:3001/run', {
+      // 使用流式端点
+      const response = await fetch(`${WORKER_URL}/run/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           messages: [
-            {
-              role: 'system',
-              content:
-                '你是 Harness Agent，一个有用的 AI 助手。你可以使用工具来帮助用户完成任务。请用中文回答。',
-            },
-            ...messages.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
+            ...messages
+              .filter((m) => m.role !== 'system')
+              .map((m) => ({
+                role: m.role,
+                content: m.content,
+                ...(m.toolCalls && { toolCalls: m.toolCalls }),
+                ...(m.toolCallId && { toolCallId: m.toolCallId }),
+              })),
             userMessage,
           ],
         }),
+        signal: abortControllerRef.current.signal,
       });
 
-      const data = (await response.json()) as {
-        success: boolean;
-        result?: string;
-        error?: string;
-      };
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
 
-      if (data.success && data.result) {
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: data.result,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+      // 处理 SSE 流
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentMessages: Message[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            const eventType = line.slice(7).trim();
+            continue;
+          }
+
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+
+            try {
+              const parsed = JSON.parse(data) as Record<string, unknown>;
+
+              // 根据事件类型处理
+              if (parsed['traceId']) {
+                setLastTraceId(parsed['traceId'] as string);
+              }
+
+              // 处理不同类型的 SSE 事件
+              if (parsed['type'] === 'thinking') {
+                setStatusText(parsed['message'] as string);
+              } else if (parsed['type'] === 'tool_call') {
+                const toolName = parsed['name'] as string;
+                setStatusText(`调用工具: ${toolName}...`);
+                // 添加工具调用消息
+                const toolCallMsg: Message = {
+                  role: 'assistant',
+                  content: '',
+                  toolCalls: [{
+                    id: `call_${Date.now()}`,
+                    name: toolName,
+                    arguments: parsed['arguments'] as Record<string, unknown>,
+                  }],
+                };
+                currentMessages.push(toolCallMsg);
+                setMessages((prev) => [
+                  ...prev.filter((m) => m.role !== 'system'),
+                  userMessage,
+                  ...currentMessages,
+                ]);
+              } else if (parsed['type'] === 'tool_result') {
+                setStatusText('处理工具结果...');
+                // 添加工具结果消息
+                const toolResultMsg: Message = {
+                  role: 'tool',
+                  content: parsed['content'] as string,
+                  toolCallId: `call_${Date.now()}`,
+                };
+                currentMessages.push(toolResultMsg);
+                setMessages((prev) => [
+                  ...prev.filter((m) => m.role !== 'system'),
+                  userMessage,
+                  ...currentMessages,
+                ]);
+              } else if (parsed['type'] === 'message') {
+                // 最终消息
+                const finalMsg: Message = {
+                  role: 'assistant',
+                  content: parsed['content'] as string,
+                };
+                currentMessages.push(finalMsg);
+                setMessages((prev) => [
+                  ...prev.filter((m) => m.role !== 'system'),
+                  userMessage,
+                  ...currentMessages,
+                ]);
+                if (parsed['usage']) {
+                  setLastUsage(parsed['usage'] as TokenUsage);
+                }
+              } else if (parsed['type'] === 'error') {
+                const errorMsg: Message = {
+                  role: 'assistant',
+                  content: `Error: ${parsed['error']}`,
+                };
+                setMessages((prev) => [...prev, errorMsg]);
+              } else if (parsed['success'] !== undefined) {
+                // done 事件
+                if (parsed['usage']) {
+                  setLastUsage(parsed['usage'] as TokenUsage);
+                }
+              }
+            } catch {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        setStatusText('已取消');
       } else {
         const errorMessage: Message = {
           role: 'assistant',
-          content: `Error: ${data.error ?? 'Unknown error'}`,
+          content: `Failed to connect to Worker: ${error instanceof Error ? error.message : 'Unknown error'}`,
         };
         setMessages((prev) => [...prev, errorMessage]);
       }
-    } catch (error) {
-      const errorMessage: Message = {
-        role: 'assistant',
-        content: `Failed to connect to Worker: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      setStatusText('');
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -110,15 +234,39 @@ export function ChatInterface() {
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-gray-100 rounded-lg px-4 py-2">
-              <div className="flex space-x-2">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100" />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200" />
+              <div className="flex items-center gap-2">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100" />
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200" />
+                </div>
+                <span className="text-sm text-gray-500">{statusText || 'Agent 思考中...'}</span>
+                <button
+                  onClick={handleCancel}
+                  className="ml-2 text-xs text-red-500 hover:text-red-700"
+                >
+                  取消
+                </button>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* 状态栏 */}
+      {(lastUsage || lastTraceId) && (
+        <div className="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500 flex justify-between">
+          {lastUsage && (
+            <span>
+              Tokens: {lastUsage.totalTokens}
+              (prompt: {lastUsage.promptTokens}, completion: {lastUsage.completionTokens})
+            </span>
+          )}
+          {lastTraceId && (
+            <span className="font-mono">Trace: {lastTraceId.slice(0, 8)}...</span>
+          )}
+        </div>
+      )}
 
       {/* 输入框 */}
       <ChatInput onSend={handleSendMessage} disabled={isLoading} />

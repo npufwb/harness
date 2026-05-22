@@ -100,12 +100,37 @@ app.get('/services', (c) => {
 // 启动服务器
 const port = parseInt(process.env['PORT'] ?? '3002', 10);
 
-serve(
-  {
-    fetch: app.fetch,
-    port,
-  },
-  (info) => {
-    pinoLogger.info({ port: info.port }, 'Gateway server started');
-  }
-);
+async function startGateway() {
+  // 加载 MCP 服务
+  pinoLogger.info('Loading MCP services...');
+  await registry.loadMCPServices();
+
+  // 启动 HTTP 服务
+  serve(
+    {
+      fetch: app.fetch,
+      port,
+    },
+    (info) => {
+      pinoLogger.info({ port: info.port }, 'Gateway server started');
+    }
+  );
+}
+
+// 优雅关闭
+process.on('SIGINT', async () => {
+  pinoLogger.info('Shutting down Gateway...');
+  await registry.disconnect();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  pinoLogger.info('Shutting down Gateway...');
+  await registry.disconnect();
+  process.exit(0);
+});
+
+startGateway().catch((error) => {
+  pinoLogger.error({ error: error.message }, 'Failed to start Gateway');
+  process.exit(1);
+});

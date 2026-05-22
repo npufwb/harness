@@ -1,4 +1,4 @@
-import { toolDefinitions, toolHandlers } from '@harness/tools';
+import { toolDefinitions, toolHandlers, MCPClient, loadMCPConfig } from '@harness/tools';
 import type { Tool, ToolResult } from '@harness/shared';
 import { logger } from '@harness/shared';
 
@@ -12,10 +12,43 @@ export interface MCPService {
 export class ToolRegistry {
   private services = new Map<string, MCPService>();
   private toolToService = new Map<string, string>();
+  private mcpClients: MCPClient[] = [];
 
   constructor() {
     // 注册内置工具
     this.registerBuiltinTools();
+  }
+
+  /**
+   * 加载 MCP 配置并连接外部服务
+   */
+  async loadMCPServices(configPath?: string): Promise<void> {
+    const config = loadMCPConfig(configPath);
+
+    for (const [name, serverConfig] of Object.entries(config.servers)) {
+      try {
+        const client = new MCPClient({ name, config: serverConfig });
+        await client.connect();
+
+        // 获取工具列表
+        const tools = await client.listTools();
+        logger.info({ serverName: name, toolCount: tools.length }, 'Discovered MCP tools');
+
+        // 注册为服务
+        this.registerService({
+          name,
+          tools,
+          handler: async (toolName: string, input: Record<string, unknown>) => {
+            return client.callTool(toolName, input);
+          },
+        });
+
+        this.mcpClients.push(client);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error({ serverName: name, error: errorMessage }, 'Failed to connect to MCP server');
+      }
+    }
   }
 
   private registerBuiltinTools(): void {
@@ -96,5 +129,15 @@ export class ToolRegistry {
         isError: true,
       };
     }
+  }
+
+  /**
+   * 断开所有 MCP 连接
+   */
+  async disconnect(): Promise<void> {
+    for (const client of this.mcpClients) {
+      await client.disconnect();
+    }
+    this.mcpClients = [];
   }
 }
