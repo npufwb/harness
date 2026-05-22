@@ -38,3 +38,7 @@ out/
 
 # Vercel
 .vercel
+
+
+# claude
+.claude/

@@ -8,7 +8,25 @@
       "Bash(pnpm test *)",
       "Bash(pnpm --filter @harness/agents add pino)",
       "Bash(git *)",
-      "Bash(pnpm --filter @harness/shared add -D dotenv)"
+      "Bash(pnpm --filter @harness/shared add -D dotenv)",
+      "Bash(pnpm --filter @harness/shared test)",
+      "Bash(npx tsc *)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm --filter @harness/memory typecheck)",
+      "Bash(pnpm --filter @harness/agents add @langchain/langgraph-checkpoint-postgres)",
+      "Bash(pnpm --filter @harness/agents typecheck)",
+      "Bash(node -e \"const lg = require\\('@langchain/langgraph'\\); console.log\\(Object.keys\\(lg\\).filter\\(k => k.includes\\('Checkpoint'\\)\\)\\)\")",
+      "Bash(pnpm --filter @harness/agents test)",
+      "Bash(pnpm --filter @harness/tools test)",
+      "Bash(pnpm --filter @harness/worker typecheck)",
+      "Bash(pnpm --filter @harness/gateway typecheck)",
+      "Bash(pnpm --filter @harness/web typecheck)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(pnpm -r exec sh -c 'if [ -f package.json ]; then name=$\\(node -e \"console.log\\(require\\(\\\\\"./package.json\\\\\"\\).name\\)\"\\); has_test=$\\(node -e \"console.log\\(!!require\\(\\\\\"./package.json\\\\\"\\).scripts?.test\\)\"\\); echo \"$name: test=$has_test\"; fi')",
+      "Bash(pnpm --filter @harness/gateway dev)",
+      "Bash(pnpm --filter @harness/worker dev)",
+      "Bash(pkill -f \"tsx watch src/index.ts\")",
+      "Bash(curl -s http://localhost:3001/health)"
     ]
   }
 }
