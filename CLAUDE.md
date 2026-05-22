@@ -129,11 +129,36 @@ infra/
 
 启动方式：
 ```bash
-export LLM_API_KEY=your-api-key
-export LLM_PROVIDER=anthropic  # 或 openai / openrouter
-pnpm dev:worker   # 启动 Worker
-pnpm dev:gateway  # 启动 Gateway
-pnpm dev:web      # 启动 Web 控制台
+# 配置环境变量（在 apps/worker/.env 中）
+LLM_PROVIDER=openai
+LLM_API_KEY=your-api-key
+LLM_BASE_URL=https://api.example.com/v1
+LLM_MODEL=your-model
+
+pnpm dev:worker   # 启动 Worker (端口 3001)
+pnpm dev:gateway  # 启动 Gateway (端口 3002)
+pnpm dev:web      # 启动 Web 控制台 (端口 3000)
+```
+
+测试验证：
+```
+Worker 健康检查  ✅ GET  http://localhost:3001/health
+Gateway 健康检查 ✅ GET  http://localhost:3002/health
+Gateway 工具列表 ✅ GET  http://localhost:3002/tools
+
+Agent 计算器测试 ✅ POST http://localhost:3001/run
+  输入: "计算 2 + 3 * 4"
+  流程: Agent → 调用 calculator 工具 → 返回 14
+  输出: "按照运算优先级，先计算乘法：3×4=12，再计算加法：2+12=14"
+
+Agent 天气查询测试 ✅ POST http://localhost:3001/run
+  输入: "北京今天的天气怎么样？"
+  流程: Agent → 调用 weather 工具 → 返回天气数据
+  输出: "今天北京天气很好！温度22°C，湿度45%，晴"
+
+Gateway 工具直调 ✅ POST http://localhost:3002/tools/calculator
+  输入: {"input": {"expression": "10 * 5 + 3"}}
+  输出: "10 * 5 + 3 = 53" (耗时 4ms)
 ```
 
 ### Phase 2 — 记忆与持久化
