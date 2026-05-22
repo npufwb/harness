@@ -112,6 +112,9 @@ importers:
       '@harness/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@harness/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@harness/prompts':
         specifier: workspace:*
         version: link:../../packages/prompts
@@ -124,6 +127,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.11.0
         version: 1.19.14(hono@4.12.21)
+      '@langchain/langgraph-checkpoint-postgres':
+        specifier: ^1.0.1
+        version: 1.0.1(@langchain/core@0.3.80(openai@4.104.0(zod@3.25.76)))(@langchain/langgraph-checkpoint@0.0.18(@langchain/core@0.3.80(openai@4.104.0(zod@3.25.76))))
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2

@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@harness/agents": "workspace:*",
+    "@harness/memory": "workspace:*",
     "@harness/prompts": "workspace:*",
     "@harness/shared": "workspace:*",
     "@harness/tools": "workspace:*",
     "@hono/node-server": "^1.11.0",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.1",
     "dotenv": "^17.4.2",
     "hono": "^4.4.0",
     "pino": "^9.0.0",
