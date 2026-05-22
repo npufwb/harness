@@ -286,6 +286,12 @@ export function ChatInterface() {
                 >
                   北京今天的天气怎么样？
                 </button>
+                <button
+                  onClick={() => handleSendMessage('请记住我的名字是小明')}
+                  className="block w-full text-left px-3 py-2 text-sm bg-gray-50 rounded hover:bg-gray-100"
+                >
+                  请记住我的名字是小明（长期记忆）
+                </button>
               </div>
             </div>
           </div>
