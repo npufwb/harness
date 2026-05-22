@@ -80,6 +80,7 @@ export function ChatInterface() {
       const decoder = new TextDecoder();
       let buffer = '';
       let currentMessages: Message[] = [];
+      let currentEventType = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -91,7 +92,7 @@ export function ChatInterface() {
 
         for (const line of lines) {
           if (line.startsWith('event: ')) {
-            const eventType = line.slice(7).trim();
+            currentEventType = line.slice(7).trim();
             continue;
           }
 
@@ -101,15 +102,15 @@ export function ChatInterface() {
             try {
               const parsed = JSON.parse(data) as Record<string, unknown>;
 
-              // 根据事件类型处理
-              if (parsed['traceId']) {
-                setLastTraceId(parsed['traceId'] as string);
-              }
-
               // 处理不同类型的 SSE 事件
-              if (parsed['type'] === 'thinking') {
+              if (currentEventType === 'start') {
+                // 开始事件，获取 traceId
+                if (parsed['traceId']) {
+                  setLastTraceId(parsed['traceId'] as string);
+                }
+              } else if (currentEventType === 'thinking') {
                 setStatusText(parsed['message'] as string);
-              } else if (parsed['type'] === 'tool_call') {
+              } else if (currentEventType === 'tool_call') {
                 const toolName = parsed['name'] as string;
                 setStatusText(`调用工具: ${toolName}...`);
                 // 添加工具调用消息
@@ -128,7 +129,7 @@ export function ChatInterface() {
                   userMessage,
                   ...currentMessages,
                 ]);
-              } else if (parsed['type'] === 'tool_result') {
+              } else if (currentEventType === 'tool_result') {
                 setStatusText('处理工具结果...');
                 // 添加工具结果消息
                 const toolResultMsg: Message = {
@@ -142,7 +143,7 @@ export function ChatInterface() {
                   userMessage,
                   ...currentMessages,
                 ]);
-              } else if (parsed['type'] === 'message') {
+              } else if (currentEventType === 'message') {
                 // 最终消息
                 const finalMsg: Message = {
                   role: 'assistant',
@@ -157,14 +158,14 @@ export function ChatInterface() {
                 if (parsed['usage']) {
                   setLastUsage(parsed['usage'] as TokenUsage);
                 }
-              } else if (parsed['type'] === 'error') {
+              } else if (currentEventType === 'error') {
                 const errorMsg: Message = {
                   role: 'assistant',
                   content: `Error: ${parsed['error']}`,
                 };
                 setMessages((prev) => [...prev, errorMsg]);
-              } else if (parsed['success'] !== undefined) {
-                // done 事件
+              } else if (currentEventType === 'done') {
+                // 完成事件
                 if (parsed['usage']) {
                   setLastUsage(parsed['usage'] as TokenUsage);
                 }
