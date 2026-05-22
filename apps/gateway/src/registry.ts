@@ -1,11 +1,18 @@
 import { toolDefinitions, toolHandlers, MCPClient, loadMCPConfig } from '@harness/tools';
 import type { Tool, ToolResult } from '@harness/shared';
-import { logger } from '@harness/shared';
+import { db, toolAuditLogs, logger } from '@harness/shared';
 
 export interface MCPService {
   name: string;
   tools: Tool[];
   handler: (toolName: string, input: Record<string, unknown>) => Promise<ToolResult>;
+}
+
+export interface AuditContext {
+  threadId?: string;
+  traceId?: string;
+  approval?: 'auto' | 'approved' | 'rejected';
+  approver?: string;
 }
 
 // 工具注册表
@@ -106,29 +113,59 @@ export class ToolRegistry {
     return Array.from(this.services.values());
   }
 
-  async executeTool(toolName: string, input: Record<string, unknown>): Promise<ToolResult> {
+  async executeTool(
+    toolName: string,
+    input: Record<string, unknown>,
+    auditContext?: AuditContext
+  ): Promise<ToolResult> {
     const service = this.getServiceForTool(toolName);
 
     if (!service) {
-      return {
-        content: `Tool "${toolName}" not found`,
-        isError: true,
-      };
+      return { content: `Tool "${toolName}" not found`, isError: true };
     }
 
     logger.debug({ toolName, serviceName: service.name }, 'Executing tool');
 
+    const startTime = Date.now();
+    let result: ToolResult;
+    let status: 'success' | 'error' = 'success';
+
     try {
-      return await service.handler(toolName, input);
+      result = await service.handler(toolName, input);
+      if (result.isError) {
+        status = 'error';
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error({ toolName, error: errorMessage }, 'Tool execution failed');
-
-      return {
+      result = {
         content: `Error executing tool "${toolName}": ${errorMessage}`,
         isError: true,
       };
+      status = 'error';
     }
+
+    const durationMs = Date.now() - startTime;
+
+    // Write audit log
+    try {
+      await db.insert(toolAuditLogs).values({
+        threadId: auditContext?.threadId ?? 'unknown',
+        traceId: auditContext?.traceId ?? 'unknown',
+        toolName,
+        arguments: input,
+        result: result.content,
+        status,
+        durationMs,
+        approval: auditContext?.approval ?? 'auto',
+        approver: auditContext?.approver,
+      });
+    } catch (auditError) {
+      const msg = auditError instanceof Error ? auditError.message : 'Unknown error';
+      logger.error({ error: msg }, 'Failed to write audit log');
+    }
+
+    return result;
   }
 
   /**
