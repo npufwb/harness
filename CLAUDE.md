@@ -114,11 +114,45 @@ infra/
 
 ## 开发阶段
 
-**Phase 1** — 单 Agent + 工具调用：LangGraph 基础、MCP 集成、简单 Next.js 控制台。
+### Phase 1 ✅ — 单 Agent + 工具调用
 
-**Phase 2** — 记忆、checkpoint、人工审批、工具治理。
+已完成：
+- Monorepo 基础设施（pnpm workspace、TypeScript strict、路径别名）
+- 共享层（类型定义、Pino 日志、工具函数）
+- Provider 抽象层（Anthropic/OpenAI/OpenRouter）
+- LangGraph Agent 状态图（agent → tool → agent 循环）
+- MCP 工具集成（计算器、天气查询示例工具）
+- Agent Worker（Hono HTTP API，端口 3001）
+- MCP Gateway（统一工具端点，端口 3002）
+- Next.js 控制台（聊天界面，端口 3000）
+- Prompt 模板版本化
 
-**Phase 3** — 多 Agent、评估、规划、自主循环。
+启动方式：
+```bash
+export LLM_API_KEY=your-api-key
+export LLM_PROVIDER=anthropic  # 或 openai / openrouter
+pnpm dev:worker   # 启动 Worker
+pnpm dev:gateway  # 启动 Gateway
+pnpm dev:web      # 启动 Web 控制台
+```
+
+### Phase 2 — 记忆与持久化
+
+计划：
+- 数据库集成（PostgreSQL + Drizzle ORM + pgvector）
+- 记忆系统（短期、工作、长期、语义记忆）
+- Checkpoint / 可恢复执行
+- 人工审批 (HITL) UI
+- 工具调用审计与治理
+
+### Phase 3 — 多 Agent 与自主
+
+计划：
+- 多 Agent 编排与协作
+- 评估框架（Agent 基准测试、质量指标）
+- 规划与自主循环
+- 工作流编辑器 (React Flow)
+- Trace 查看器与可观测性增强
 
 ## 开发规范
 
