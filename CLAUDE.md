@@ -170,8 +170,11 @@ MCP 配置（apps/gateway/mcp.config.json）：
 
 API 端点：
 ```
-POST /run          # 非流式执行（返回完整结果）
-POST /run/stream   # 流式执行（SSE，支持取消）
+POST /run          # 非流式执行（新增可选 threadId 参数）
+POST /run/stream   # 流式执行（新增可选 threadId 参数）
+POST /run/approve  # HITL 审批（新增）
+POST /run/reject   # HITL 拒绝（新增）
+GET  /audit        # 审计日志查询（新增）
 GET  /health       # 健康检查
 GET  /tools        # 工具列表
 POST /tools/:name  # 执行工具
@@ -203,14 +206,30 @@ Gateway 工具直调 ✅ POST http://localhost:3002/tools/calculator
   工具层: 14 个测试通过（计算器 + 天气）
 ```
 
-### Phase 2 — 记忆与持久化
+### Phase 2 ✅ — 记忆与持久化
 
-计划：
-- 数据库集成（PostgreSQL + Drizzle ORM + pgvector）
-- 记忆系统（短期、工作、长期、语义记忆）
-- Checkpoint / 可恢复执行
-- 人工审批 (HITL) UI
-- 工具调用审计与治理
+已完成：
+- 数据库集成（PostgreSQL + Drizzle ORM）
+- 记忆系统（短期、工作、长期记忆）
+- Checkpoint / 可恢复执行（LangGraph PostgresSaver）
+- HITL 人工审批（工具触发 + 规则触发）
+- 工具调用审计日志
+
+新增依赖：
+- drizzle-orm, postgres — 数据库 ORM 和驱动
+- @langchain/langgraph-checkpoint-postgres — LangGraph checkpoint
+
+新增包：
+- @harness/memory — 记忆系统
+
+新增 API 端点：
+- POST /run/approve — HITL 审批
+- POST /run/reject — HITL 拒绝
+- GET /audit — 审计日志查询
+
+测试验证：
+- TypeScript 类型检查 ✅ 全部 8 个包通过
+- 单元测试 ✅ 24 个测试用例通过（shared 7 + tools 14 + memory 3）
 
 ### Phase 3 — 多 Agent 与自主
 
