@@ -1,6 +1,6 @@
-import { StateGraph, END, START, Annotation, type BaseCheckpointSaver } from '@langchain/langgraph';
-import type { Message, Tool, AgentResult, TokenUsage } from '@harness/shared';
-import { logger as defaultLogger, generateId } from '@harness/shared';
+import { StateGraph, END, START, Annotation, interrupt, type BaseCheckpointSaver } from '@langchain/langgraph';
+import type { Message, Tool, AgentResult, TokenUsage, ToolCall } from '@harness/shared';
+import { logger as defaultLogger } from '@harness/shared';
 import type { Logger } from 'pino';
 import type { LLMProvider } from '../provider.js';
 
@@ -79,7 +79,7 @@ function createAgentNode(provider: LLMProvider, traceLogger: Logger) {
 function createToolNode(
   toolHandlers: Map<string, (input: unknown) => Promise<string>>,
   traceLogger: Logger,
-  approvalChecker?: (toolCall: { id: string; name: string; arguments: Record<string, unknown> }) => { needed: boolean; reason: string }
+  approvalChecker?: (toolCall: ToolCall) => { needed: boolean; reason: string }
 ) {
   return async (state: AgentState): Promise<Partial<AgentState>> => {
     const toolCalls = state.currentToolCall;
@@ -146,15 +146,44 @@ function createToolNode(
     return {
       messages: toolMessages,
       currentToolCall: undefined,
+      approvalState: undefined,
     };
   };
 }
 
 // 创建等待审批节点
 function createWaitForApprovalNode(traceLogger: Logger) {
-  return async (_state: AgentState): Promise<Partial<AgentState>> => {
+  return async (state: AgentState): Promise<Partial<AgentState>> => {
     traceLogger.info('Waiting for approval (interrupt)');
-    return {};
+    const approvalState = state.approvalState;
+    if (!approvalState?.toolCall?.[0]) {
+      return { approvalState: undefined };
+    }
+    // Call interrupt to pause execution and wait for human approval
+    const toolCall = approvalState.toolCall[0];
+    const decision = interrupt({
+      toolName: toolCall.name,
+      arguments: toolCall.arguments,
+      reason: approvalState.reason ?? '需要审批',
+    });
+    // After resume, decision will be 'approve' or 'reject'
+    traceLogger.info({ decision }, 'Approval decision received');
+    if (decision === 'approve') {
+      // Clear approval state and set currentToolCall so toolExecutor runs
+      return {
+        approvalState: undefined,
+        currentToolCall: [toolCall],
+      };
+    }
+    // Rejected: clear approval state, add rejection message
+    return {
+      approvalState: undefined,
+      currentToolCall: undefined,
+      messages: [{
+        role: 'assistant',
+        content: `工具调用 "${toolCall.name}" 被拒绝: ${approvalState.reason}`,
+      }],
+    };
   };
 }
 
@@ -176,7 +205,7 @@ export function createBasicAgentGraph(
   traceLogger: Logger = defaultLogger,
   options?: {
     checkpointer?: BaseCheckpointSaver;
-    approvalChecker?: (toolCall: { id: string; name: string; arguments: Record<string, unknown> }) => { needed: boolean; reason: string };
+    approvalChecker?: (toolCall: ToolCall) => { needed: boolean; reason: string };
   }
 ) {
   const agentNode = createAgentNode(provider, traceLogger);
@@ -194,7 +223,7 @@ export function createBasicAgentGraph(
       [END]: END,
     })
     .addEdge('toolExecutor', 'agent')
-    .addEdge('waitForApproval', 'agent');
+    .addEdge('waitForApproval', 'toolExecutor');
 
   return graph.compile({
     ...(options?.checkpointer ? { checkpointer: options.checkpointer } : {}),
@@ -211,7 +240,7 @@ export async function runAgent(
   options?: {
     checkpointer?: BaseCheckpointSaver;
     threadId?: string;
-    approvalChecker?: (toolCall: { id: string; name: string; arguments: Record<string, unknown> }) => { needed: boolean; reason: string };
+    approvalChecker?: (toolCall: ToolCall) => { needed: boolean; reason: string };
   }
 ): Promise<AgentResult> {
   const graph = createBasicAgentGraph(provider, toolHandlers, traceLogger, {
