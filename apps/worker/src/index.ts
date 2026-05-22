@@ -7,6 +7,8 @@ import { logger as pinoLogger } from '@harness/shared';
 import { AgentExecutor } from './executor.js';
 import type { ExecutorConfig } from './executor.js';
 import type { Message } from '@harness/shared';
+import { auditRoutes } from './routes/audit.js';
+import { createApprovalRoutes } from './routes/approve.js';
 
 // 从环境变量读取配置
 const config: ExecutorConfig = {
@@ -36,6 +38,12 @@ app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// 审计日志查询
+app.route('/audit', auditRoutes);
+
+// 审批路由（approve/reject）
+app.route('/run', createApprovalRoutes(executor));
+
 // Agent 执行端点（非流式，保持兼容）
 app.post('/run', async (c) => {
   const startTime = Date.now();
@@ -44,6 +52,7 @@ app.post('/run', async (c) => {
   try {
     const body = (await c.req.json()) as {
       messages: Message[];
+      threadId?: string;
     };
 
     if (!body.messages?.length) {
@@ -51,11 +60,11 @@ app.post('/run', async (c) => {
     }
 
     pinoLogger.info(
-      { traceId, messageCount: body.messages.length },
+      { traceId, messageCount: body.messages.length, threadId: body.threadId },
       'Received agent execution request'
     );
 
-    const result = await executor.execute(body.messages, traceId);
+    const result = await executor.execute(body.messages, traceId, body.threadId);
 
     const duration = Date.now() - startTime;
     pinoLogger.info({ traceId, duration, success: result.success }, 'Request completed');
@@ -67,6 +76,7 @@ app.post('/run', async (c) => {
       error: result.error,
       usage: result.usage,
       traceId,
+      threadId: body.threadId,
       duration,
     });
   } catch (error) {
@@ -92,6 +102,7 @@ app.post('/run/stream', async (c) => {
     try {
       const body = (await c.req.json()) as {
         messages: Message[];
+        threadId?: string;
       };
 
       if (!body.messages?.length) {
@@ -100,14 +111,14 @@ app.post('/run/stream', async (c) => {
       }
 
       pinoLogger.info(
-        { traceId, messageCount: body.messages.length },
+        { traceId, messageCount: body.messages.length, threadId: body.threadId },
         'Received streaming agent execution request'
       );
 
       // 发送开始事件
       await stream.writeSSE({
         event: 'start',
-        data: JSON.stringify({ traceId }),
+        data: JSON.stringify({ traceId, threadId: body.threadId }),
       });
 
       // 使用流式执行
@@ -116,7 +127,7 @@ app.post('/run/stream', async (c) => {
           event: event.type,
           data: JSON.stringify(event.data),
         });
-      });
+      }, body.threadId);
 
       // 发送完成事件
       await stream.writeSSE({
@@ -126,6 +137,7 @@ app.post('/run/stream', async (c) => {
           result: result.result,
           usage: result.usage,
           traceId,
+          threadId: body.threadId,
         }),
       });
 
